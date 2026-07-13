@@ -32,7 +32,7 @@ const tabelaToDB = (t) => ({ nome: t.nome, categoria: t.categoria || null, descr
 // Serviços / OS (com itens aninhados)
 const osFromDB = (r) => ({
   id: r.id, clienteId: r.cliente_id, cliente: r.cliente_nome, telefone: r.cliente_telefone,
-  endereco: r.cliente_endereco, tipo: cap(r.tipo), status: r.status,
+  endereco: r.cliente_endereco, tipo: cap(r.tipo), status: r.status, tecnico: r.tecnico || '',
   data: r.data_servico, hora: (r.hora_servico || '09:00').slice(0, 5),
   equipamentos: r.notas, obs: r.observacoes,
   itens: (r.os_itens || []).map(i => ({ produtoId: i.produto_id, nome: i.nome_snapshot || '', qtd: i.quantidade }))
@@ -132,6 +132,7 @@ export const inserirOS = async (os) => {
   const { data: nova, error } = await supabase.from('ordens_servico').insert({
     cliente_id: os.clienteId || null, cliente_nome: os.cliente, cliente_telefone: os.telefone || null,
     cliente_endereco: os.endereco || null, tipo: uncap(os.tipo), status: os.status,
+    tecnico: os.tecnico || null,
     data_servico: os.data, hora_servico: os.hora, notas: os.equipamentos || null, observacoes: os.obs || null
   }).select().single();
   if (error) return { error };
@@ -147,6 +148,7 @@ export const atualizarOS = async (os) => {
   await supabase.from('ordens_servico').update({
     cliente_id: os.clienteId || null, cliente_nome: os.cliente, cliente_telefone: os.telefone || null,
     cliente_endereco: os.endereco || null, tipo: uncap(os.tipo), status: os.status,
+    tecnico: os.tecnico || null,
     data_servico: os.data, hora_servico: os.hora, notas: os.equipamentos || null, observacoes: os.obs || null
   }).eq('id', os.id);
   // Estratégia simples: remove itens antigos e reinsere (triggers ajustam estoque)
