@@ -454,7 +454,7 @@ ${nfData.simulado ? '<div class="simulado-marca">SIMULADO</div>' : ''}
 </div>
 
 <div class="footer">
-  Documento gerado pelo sistema Caldeira · ${new Date().toLocaleString('pt-BR')}
+  Documento gerado pelo sistema Servigás · ${new Date().toLocaleString('pt-BR')}
 </div>
 </body></html>`;
 
@@ -546,7 +546,7 @@ const Logo = () => (
   <div className="flex items-center gap-2">
     <div className="logo-flame"><Flame size={22} strokeWidth={2.2} fill="currentColor" fillOpacity={0.15} /></div>
     <div>
-      <div className="font-display font-semibold text-base leading-none">Caldeira</div>
+      <div className="font-display font-semibold text-base leading-none">Servigás</div>
       <div className="text-[10px] uppercase tracking-wider font-mono" style={{ color: 'var(--text-tertiary)' }}>gestão interna</div>
     </div>
   </div>
@@ -2046,7 +2046,7 @@ const Configuracoes = () => {
 
   const testarZapi = async () => {
     setTestando(true);
-    const res = await enviarWhatsAppGrupo(cfg, '🧪 Teste de integração — sistema Caldeira');
+    const res = await enviarWhatsAppGrupo(cfg, '🧪 Teste de integração — sistema Servigás');
     setTestando(false);
     toast(res.ok ? (res.data?.simulado ? '✓ [Simulado] Mensagem montada com sucesso' : '✓ Mensagem enviada') : `✗ ${res.error}`, res.ok ? 'success' : 'error');
   };
@@ -2054,7 +2054,7 @@ const Configuracoes = () => {
   /* ------- Backup completo ------- */
   const exportarBackup = () => {
     const payload = { versao: 2, exportadoEm: new Date().toISOString(), dados: data };
-    downloadBlob(JSON.stringify(payload, null, 2), `backup-caldeira-${new Date().toISOString().slice(0, 10)}.json`);
+    downloadBlob(JSON.stringify(payload, null, 2), `backup-servigas-${new Date().toISOString().slice(0, 10)}.json`);
   };
   const importarBackup = async (e) => {
     const f = e.target.files[0]; if (!f) return;
@@ -2189,7 +2189,7 @@ const Configuracoes = () => {
 
       <div className="card p-5">
         <h3 className="font-display font-semibold mb-1">Sobre</h3>
-        <p className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>Caldeira v0.3 · protótipo client-side<br />Modo: {IS_PROTOTIPO ? 'PROTÓTIPO (mocks)' : 'PRODUÇÃO'}</p>
+        <p className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>Servigás v0.3 · protótipo client-side<br />Modo: {IS_PROTOTIPO ? 'PROTÓTIPO (mocks)' : 'PRODUÇÃO'}</p>
       </div>
     </div>
   );
@@ -2207,7 +2207,7 @@ const Shell = () => {
 
   useEffect(() => {
     (async () => {
-      const t = await store.get('caldeira-theme', 'light');
+      const t = await store.get('servigas-theme', 'light');
       setTheme(t);
       // Verifica sessão ativa no Supabase
       const { data: { session } } = await supabase.auth.getSession();
@@ -2220,7 +2220,7 @@ const Shell = () => {
     );
     return () => subscription.unsubscribe();
   }, []);
-  useEffect(() => { if (bootChecked) store.set('caldeira-theme', theme); }, [theme, bootChecked]);
+  useEffect(() => { if (bootChecked) store.set('servigas-theme', theme); }, [theme, bootChecked]);
   useEffect(() => { setSearch(''); }, [page]);
 
   const sair = async () => { await supabase.auth.signOut(); setUser(null); };
@@ -2289,7 +2289,7 @@ const Shell = () => {
         </header>
         <main className="max-w-7xl mx-auto px-4 py-6">{renderPage()}</main>
         <footer className="max-w-7xl mx-auto px-4 py-6 text-xs flex items-center justify-between" style={{ color: 'var(--text-tertiary)' }}>
-          <span className="font-mono">Caldeira v0.2</span>
+          <span className="font-mono">Servigás v0.2</span>
           <span>Logado como {user.email}</span>
         </footer>
       </div>
