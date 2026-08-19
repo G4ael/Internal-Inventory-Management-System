@@ -7,7 +7,8 @@ import {
   Edit2, Trash2, Send, Calendar, MapPin, Phone, User, X, ChevronRight, ChevronLeft,
   LayoutDashboard, AlertCircle, Clock, CheckCircle2, DollarSign,
   MessageCircle, Lock, LogOut, Settings, Download, Upload, Image as ImageIcon,
-  Paperclip, ArrowDownUp, FileDown, List, Grid3x3, Eye, ShoppingCart, Printer, Copy
+  Paperclip, ArrowDownUp, FileDown, List, Grid3x3, Eye, ShoppingCart, Printer, Copy,
+  Store, ExternalLink, EyeOff
 } from 'lucide-react';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -2028,6 +2029,253 @@ const Vendas = ({ search }) => {
 /* ════════════════════════════════════════════════════════════════
                   CONFIGURAÇÕES (backup + relatórios)
    ════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════
+                 LOJA VIRTUAL — catálogo do site público
+   O que você salva aqui aparece na hora em servigas-loja.vercel.app.
+   ════════════════════════════════════════════════════════════════ */
+const CATS_LOJA = [
+  { id: 'aquecedores', nome: 'Aquecedores a gás', sub: ['Rheem', 'Rinnai', 'Komeco', 'Lorenzetti'] },
+  { id: 'bombas', nome: 'Bombas pressurizadoras', sub: ['Komeco', 'Rinnai'] },
+  { id: 'mangueiras', nome: 'Mangueiras', sub: ['Gás', 'Água'] },
+  { id: 'registros', nome: 'Registros de gás', sub: [] },
+  { id: 'acabamentos', nome: 'Acabamentos', sub: [] },
+  { id: 'dutos', nome: 'Duto de exaustão', sub: [] },
+];
+const FORM_LOJA_VAZIO = { nome: '', marca: '', categoria: 'aquecedores', sub: '', preco: '', precoAntigo: '', destaque: false, ativo: true, descricao: '', specsTexto: '', fotos: [] };
+
+const Loja = ({ search }) => {
+  const toast = useToast();
+  const [lista, setLista] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(null);
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState(FORM_LOJA_VAZIO);
+  const [salvando, setSalvando] = useState(false);
+  const [subindoFoto, setSubindoFoto] = useState(false);
+
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    const { data, error } = await db.listarLojaProdutos();
+    if (error) setErro(error.message); else { setErro(null); setLista(data); }
+    setCarregando(false);
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const abrir = (p) => {
+    setForm(p
+      ? { ...p, preco: p.preco ?? '', precoAntigo: p.precoAntigo ?? '', specsTexto: (p.specs || []).join('\n') }
+      : FORM_LOJA_VAZIO);
+    setModal(p ? 'edit' : 'new');
+  };
+
+  const salvar = async () => {
+    if (!form.nome.trim()) { toast('Dê um nome ao produto.', 'error'); return; }
+    setSalvando(true);
+    const payload = { ...form, specs: form.specsTexto.split('\n').map(s => s.trim()).filter(Boolean) };
+    const { error } = modal === 'edit'
+      ? await db.atualizarLojaProduto(form.id, payload)
+      : await db.inserirLojaProduto(payload);
+    setSalvando(false);
+    if (error) { toast('Erro ao salvar: ' + error.message, 'error'); return; }
+    toast('Produto salvo! O site já está atualizado.', 'success');
+    setModal(null);
+    carregar();
+  };
+
+  const alternarAtivo = async (p) => {
+    const { error } = await db.atualizarLojaProduto(p.id, { ...p, ativo: !p.ativo });
+    if (error) toast('Erro: ' + error.message, 'error');
+    else toast(p.ativo ? 'Produto ocultado do site.' : 'Produto de volta ao site!', 'success');
+    carregar();
+  };
+
+  const remover = async (p) => {
+    if (!confirm(`Remover "${p.nome}" da loja? As fotos também serão apagadas.`)) return;
+    const { error } = await db.removerLojaProduto(p);
+    if (error) toast('Erro ao remover: ' + error.message, 'error');
+    else toast('Produto removido.', 'success');
+    carregar();
+  };
+
+  const anexarFotos = async (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (!files.length) return;
+    setSubindoFoto(true);
+    for (const f of files) {
+      const { url, error } = await db.uploadFotoLoja(f);
+      if (error) toast('Foto não subiu: ' + error.message, 'error');
+      else setForm(fm => ({ ...fm, fotos: [...fm.fotos, url] }));
+    }
+    setSubindoFoto(false);
+  };
+
+  const catAtual = CATS_LOJA.find(c => c.id === form.categoria);
+  const filtrados = lista.filter(p =>
+    !search || (p.nome + ' ' + p.marca).toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-semibold mb-1">Loja virtual</h1>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            {lista.length} produtos · {lista.filter(p => p.ativo).length} no ar — o que você salva aqui aparece na hora no site
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <a className="btn-ghost" href="https://servigas-loja.vercel.app" target="_blank" rel="noreferrer"><ExternalLink size={14} /> Ver site</a>
+          <button className="btn-primary" onClick={() => abrir(null)}><Plus size={16} /> Novo produto</button>
+        </div>
+      </div>
+
+      {erro && (
+        <div className="card p-5 text-sm" style={{ borderColor: 'var(--danger)' }}>
+          <b>Não consegui acessar o catálogo.</b> ({erro})<br />
+          Se a tabela ainda não existe, rode o script <span className="font-mono">supabase/loja.sql</span> no
+          SQL Editor do painel do Supabase e recarregue esta página.
+        </div>
+      )}
+
+      {!erro && (
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead style={{ background: 'var(--bg-subtle)' }}>
+              <tr>
+                <th className="text-left p-3 font-medium text-xs uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>Produto</th>
+                <th className="text-left p-3 font-medium text-xs uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>Categoria</th>
+                <th className="text-right p-3 font-medium text-xs uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>Preço</th>
+                <th className="text-center p-3 font-medium text-xs uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>No site</th>
+                <th className="p-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtrados.map(p => (
+                <tr key={p.id} className="table-row" style={{ opacity: p.ativo ? 1 : 0.55 }}>
+                  <td className="p-3">
+                    <div className="flex items-center gap-3">
+                      <div style={{ width: 42, height: 42, borderRadius: 8, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                        {p.fotos[0]
+                          ? <img src={p.fotos[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <ImageIcon size={17} style={{ color: 'var(--text-tertiary)' }} />}
+                      </div>
+                      <div>
+                        <div className="font-medium">{p.nome}</div>
+                        <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                          {p.marca}{p.destaque && <span className="badge badge-orange ml-2">Destaque</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <span className="badge badge-neutral">{CATS_LOJA.find(c => c.id === p.categoria)?.nome || p.categoria}</span>
+                    {p.sub && <span className="text-xs ml-1" style={{ color: 'var(--text-tertiary)' }}>{p.sub}</span>}
+                  </td>
+                  <td className="p-3 text-right font-mono">
+                    {p.preco == null
+                      ? <span style={{ color: 'var(--text-tertiary)' }}>Sob consulta</span>
+                      : <>
+                          {p.precoAntigo != null && <span className="text-xs line-through mr-1" style={{ color: 'var(--text-tertiary)' }}>{fmtBRL(p.precoAntigo)}</span>}
+                          {fmtBRL(p.preco)}
+                        </>}
+                  </td>
+                  <td className="p-3 text-center">
+                    <button className={`badge ${p.ativo ? 'badge-green' : 'badge-neutral'}`} style={{ cursor: 'pointer', border: 'none' }}
+                      onClick={() => alternarAtivo(p)} title={p.ativo ? 'Clique para ocultar do site' : 'Clique para publicar no site'}>
+                      {p.ativo ? <><Eye size={11} /> No ar</> : <><EyeOff size={11} /> Oculto</>}
+                    </button>
+                  </td>
+                  <td className="p-3 text-right whitespace-nowrap">
+                    <button className="btn-icon" onClick={() => abrir(p)}><Edit2 size={14} /></button>
+                    <button className="btn-icon" onClick={() => remover(p)}><Trash2 size={14} /></button>
+                  </td>
+                </tr>
+              ))}
+              {!carregando && filtrados.length === 0 && (
+                <tr><td colSpan="5" className="text-center py-10 text-sm" style={{ color: 'var(--text-tertiary)' }}>Nenhum produto na loja ainda — clique em “Novo produto”.</td></tr>
+              )}
+              {carregando && (
+                <tr><td colSpan="5" className="text-center py-10 text-sm" style={{ color: 'var(--text-tertiary)' }}>Carregando catálogo...</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Modal open={!!modal} onClose={() => setModal(null)} title={modal === 'edit' ? 'Editar produto da loja' : 'Novo produto da loja'} maxWidth="640px">
+        <div className="grid grid-cols-12 gap-3">
+          <Field label="Nome do produto" span={12}>
+            <input className="input" value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} placeholder="Ex: Aquecedor a gás Rinnai 15 litros" />
+          </Field>
+          <Field label="Marca" span={6}>
+            <input className="input" value={form.marca} onChange={e => setForm({ ...form, marca: e.target.value })} placeholder="Rinnai, Komeco..." />
+          </Field>
+          <Field label="Categoria" span={6}>
+            <select className="input" value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value, sub: '' })}>
+              {CATS_LOJA.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </Field>
+          {catAtual?.sub.length > 0 && (
+            <Field label="Sub-categoria (filtro da barra lateral do site)" span={6}>
+              <select className="input" value={form.sub} onChange={e => setForm({ ...form, sub: e.target.value })}>
+                <option value="">— Selecione —</option>
+                {catAtual.sub.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label="Preço (R$) — vazio = “Sob consulta”" span={catAtual?.sub.length ? 3 : 6}>
+            <input type="number" className="input" value={form.preco} onChange={e => setForm({ ...form, preco: e.target.value })} placeholder="1990" />
+          </Field>
+          <Field label="Preço antigo (promoção)" span={catAtual?.sub.length ? 3 : 6}>
+            <input type="number" className="input" value={form.precoAntigo} onChange={e => setForm({ ...form, precoAntigo: e.target.value })} placeholder="vazio = sem" />
+          </Field>
+          <Field label="Descrição (aparece nos detalhes do produto)" span={12}>
+            <textarea className="input" rows={2} value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })} />
+          </Field>
+          <Field label="Características — uma por linha" span={12}>
+            <textarea className="input font-mono" rows={4} value={form.specsTexto} onChange={e => setForm({ ...form, specsTexto: e.target.value })} placeholder={'Vazão: 15 L/min\nGás: GN ou GLP\nGarantia de 5 anos'} />
+          </Field>
+          <Field label="Fotos (a primeira é a principal)" span={12}>
+            <div className="flex flex-wrap gap-2 items-center">
+              {form.fotos.map((f, i) => (
+                <div key={f} style={{ position: 'relative' }}>
+                  <img src={f} alt="" className="photo-thumb" />
+                  <button className="btn-icon" title="Tirar foto do produto"
+                    style={{ position: 'absolute', top: -6, right: -6, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 999, padding: 2 }}
+                    onClick={() => setForm(fm => ({ ...fm, fotos: fm.fotos.filter((_, j) => j !== i) }))}>
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <label className="btn-ghost" style={{ cursor: 'pointer' }}>
+                <ImageIcon size={14} /> {subindoFoto ? 'Enviando...' : 'Adicionar fotos'}
+                <input type="file" accept="image/*" multiple hidden onChange={anexarFotos} disabled={subindoFoto} />
+              </label>
+            </div>
+          </Field>
+          <Field label="" span={6}>
+            <label className="flex items-center gap-2 text-sm" style={{ cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.destaque} onChange={e => setForm({ ...form, destaque: e.target.checked })} />
+              Selo “Destaque” (aparece primeiro no site)
+            </label>
+          </Field>
+          <Field label="" span={6}>
+            <label className="flex items-center gap-2 text-sm" style={{ cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.ativo} onChange={e => setForm({ ...form, ativo: e.target.checked })} />
+              Visível no site
+            </label>
+          </Field>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button className="btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
+          <button className="btn-primary" onClick={salvar} disabled={salvando || subindoFoto}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+        </div>
+      </Modal>
+    </div>
+  );
+};
+
 const Configuracoes = () => {
   const { data, recarregar } = useData();
   const toast = useToast();
@@ -2231,6 +2479,7 @@ const Shell = () => {
   const nav = [
     { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
     { id: 'vendas', label: 'Vendas', icon: ShoppingCart },
+    { id: 'loja', label: 'Loja', icon: Store },
     { id: 'estoque', label: 'Estoque', icon: Package },
     { id: 'servicos', label: 'Serviços', icon: Wrench },
     { id: 'orcamentos', label: 'Orçamentos', icon: Receipt },
@@ -2240,7 +2489,7 @@ const Shell = () => {
   ];
 
   const placeholders = {
-    dashboard: '', vendas: 'Buscar venda ou cliente...', estoque: 'Buscar produto, SKU ou motivo...', servicos: 'Buscar cliente ou endereço...',
+    dashboard: '', vendas: 'Buscar venda ou cliente...', loja: 'Buscar produto da loja...', estoque: 'Buscar produto, SKU ou motivo...', servicos: 'Buscar cliente ou endereço...',
     orcamentos: 'Buscar cliente ou local...', notas: 'Buscar número ou fornecedor...',
     clientes: 'Buscar nome ou telefone...', config: ''
   };
@@ -2249,6 +2498,7 @@ const Shell = () => {
     switch (page) {
       case 'dashboard': return <Dashboard onNavigate={setPage} />;
       case 'vendas': return <Vendas search={search} />;
+      case 'loja': return <Loja search={search} />;
       case 'estoque': return <Estoque search={search} />;
       case 'servicos': return <Servicos search={search} />;
       case 'orcamentos': return <Orcamentos search={search} />;

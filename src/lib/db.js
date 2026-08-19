@@ -236,3 +236,61 @@ export const urlAssinada = async (bucket, path, segundos = 3600) => {
   const { data } = await supabase.storage.from(bucket).createSignedUrl(path, segundos);
   return data?.signedUrl;
 };
+
+/* ───────────────────────── LOJA VIRTUAL ───────────────────────── */
+// Catálogo do site público (https://servigas-loja.vercel.app), tabela
+// `loja_produtos`. O site só LÊ produtos ativos (RLS); a escrita passa
+// por aqui e exige usuário logado.
+const lojaFromDB = (r) => ({
+  id: r.id, nome: r.nome, marca: r.marca, categoria: r.categoria, sub: r.sub,
+  preco: r.preco == null ? null : Number(r.preco),
+  precoAntigo: r.preco_antigo == null ? null : Number(r.preco_antigo),
+  destaque: r.destaque, ativo: r.ativo, descricao: r.descricao,
+  specs: r.specs || [], fotos: r.fotos || []
+});
+const lojaToDB = (p) => ({
+  nome: p.nome, marca: p.marca || '', categoria: p.categoria, sub: p.sub || '',
+  preco: p.preco === '' || p.preco == null ? null : Number(p.preco),
+  preco_antigo: p.precoAntigo === '' || p.precoAntigo == null ? null : Number(p.precoAntigo),
+  destaque: !!p.destaque, ativo: p.ativo !== false, descricao: p.descricao || '',
+  specs: p.specs || [], fotos: p.fotos || []
+});
+
+export const listarLojaProdutos = async () => {
+  const { data, error } = await supabase.from('loja_produtos').select('*').order('criado_em', { ascending: false });
+  return { data: (data || []).map(lojaFromDB), error };
+};
+export const inserirLojaProduto = (p) => supabase.from('loja_produtos').insert(lojaToDB(p));
+export const atualizarLojaProduto = (id, p) => supabase.from('loja_produtos').update(lojaToDB(p)).eq('id', id);
+
+// Remove o produto e apaga as fotos dele no Storage
+export const removerLojaProduto = async (p) => {
+  const paths = (p.fotos || []).map(u => u.split('/loja-fotos/')[1]).filter(Boolean);
+  if (paths.length) await supabase.storage.from('loja-fotos').remove(paths);
+  return supabase.from('loja_produtos').delete().eq('id', p.id);
+};
+
+// Comprime a imagem no navegador (máx. 900px no maior lado, JPEG 85%)
+// para o site carregar rápido, e sobe pro bucket público `loja-fotos`.
+const comprimirImagem = (file, maxLado = 900) => new Promise((resolve) => {
+  const img = new Image();
+  img.onload = () => {
+    const escala = Math.min(1, maxLado / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * escala);
+    c.height = Math.round(img.height * escala);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    c.toBlob((blob) => resolve(blob || file), 'image/jpeg', 0.85);
+  };
+  img.onerror = () => resolve(file);
+  img.src = URL.createObjectURL(file);
+});
+
+export const uploadFotoLoja = async (file) => {
+  const blob = await comprimirImagem(file);
+  const path = `produtos/${uid()}.jpg`;
+  const { error } = await supabase.storage.from('loja-fotos').upload(path, blob, { contentType: 'image/jpeg' });
+  if (error) return { error };
+  const { data } = supabase.storage.from('loja-fotos').getPublicUrl(path);
+  return { url: data.publicUrl };
+};
