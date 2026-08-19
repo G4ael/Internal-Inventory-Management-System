@@ -2098,9 +2098,13 @@ const Loja = ({ search }) => {
   };
 
   const anexarFotos = async (e) => {
-    const files = [...e.target.files];
+    const escolhidas = [...e.target.files];
     e.target.value = '';
-    if (!files.length) return;
+    if (!escolhidas.length) return;
+    const vagas = db.MAX_FOTOS_LOJA - form.fotos.length;
+    if (vagas <= 0) { toast(`Máximo de ${db.MAX_FOTOS_LOJA} fotos por produto.`, 'error'); return; }
+    const files = escolhidas.slice(0, vagas);
+    if (escolhidas.length > vagas) toast(`Só cabem mais ${vagas} foto(s) — o resto foi ignorado.`, 'info');
     setSubindoFoto(true);
     for (const f of files) {
       const { url, error } = await db.uploadFotoLoja(f);
@@ -2109,6 +2113,15 @@ const Loja = ({ search }) => {
     }
     setSubindoFoto(false);
   };
+
+  // Move a foto na ordem — a primeira é a que aparece no catálogo
+  const moverFoto = (i, d) => setForm(fm => {
+    const fotos = [...fm.fotos];
+    const j = i + d;
+    if (j < 0 || j >= fotos.length) return fm;
+    [fotos[i], fotos[j]] = [fotos[j], fotos[i]];
+    return { ...fm, fotos };
+  });
 
   const catAtual = CATS_LOJA.find(c => c.id === form.categoria);
   const filtrados = lista.filter(p =>
@@ -2155,15 +2168,22 @@ const Loja = ({ search }) => {
                 <tr key={p.id} className="table-row" style={{ opacity: p.ativo ? 1 : 0.55 }}>
                   <td className="p-3">
                     <div className="flex items-center gap-3">
-                      <div style={{ width: 42, height: 42, borderRadius: 8, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                      <div style={{ width: 52, height: 52, borderRadius: 9, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, position: 'relative', border: '1px solid var(--border)' }}>
                         {p.fotos[0]
-                          ? <img src={p.fotos[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : <ImageIcon size={17} style={{ color: 'var(--text-tertiary)' }} />}
+                          ? <img src={p.fotos[0]} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <ImageIcon size={18} style={{ color: 'var(--text-tertiary)' }} />}
+                        {p.fotos.length > 1 && (
+                          <span style={{ position: 'absolute', bottom: 2, right: 2, background: 'rgba(0,0,0,.6)', color: '#fff', fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 999 }}>
+                            {p.fotos.length}
+                          </span>
+                        )}
                       </div>
                       <div>
                         <div className="font-medium">{p.nome}</div>
-                        <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                          {p.marca}{p.destaque && <span className="badge badge-orange ml-2">Destaque</span>}
+                        <div className="text-xs flex items-center gap-2" style={{ color: 'var(--text-tertiary)' }}>
+                          {p.marca}
+                          {p.destaque && <span className="badge badge-orange">Destaque</span>}
+                          {p.fotos.length === 0 && <span className="badge badge-yellow">sem foto</span>}
                         </div>
                       </div>
                     </div>
@@ -2236,23 +2256,39 @@ const Loja = ({ search }) => {
           <Field label="Características — uma por linha" span={12}>
             <textarea className="input font-mono" rows={4} value={form.specsTexto} onChange={e => setForm({ ...form, specsTexto: e.target.value })} placeholder={'Vazão: 15 L/min\nGás: GN ou GLP\nGarantia de 5 anos'} />
           </Field>
-          <Field label="Fotos (a primeira é a principal)" span={12}>
-            <div className="flex flex-wrap gap-2 items-center">
+          <Field label={`Fotos do produto — até ${db.MAX_FOTOS_LOJA} (${form.fotos.length} enviada${form.fotos.length === 1 ? '' : 's'})`} span={12}>
+            <div className="flex flex-wrap gap-3 items-start">
               {form.fotos.map((f, i) => (
-                <div key={f} style={{ position: 'relative' }}>
-                  <img src={f} alt="" className="photo-thumb" />
-                  <button className="btn-icon" title="Tirar foto do produto"
-                    style={{ position: 'absolute', top: -6, right: -6, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 999, padding: 2 }}
+                <div key={f} style={{ position: 'relative', width: 92 }}>
+                  <img src={f} alt={`Foto ${i + 1}`} style={{ width: 92, height: 92, objectFit: 'cover', borderRadius: 10, border: `2px solid ${i === 0 ? 'var(--accent)' : 'var(--border)'}`, display: 'block' }} />
+                  {i === 0 && (
+                    <span className="badge badge-orange" style={{ position: 'absolute', bottom: 4, left: 4, fontSize: 10, padding: '1px 6px' }}>Capa</span>
+                  )}
+                  <button title="Remover esta foto"
+                    style={{ position: 'absolute', top: -7, right: -7, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 999, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}
                     onClick={() => setForm(fm => ({ ...fm, fotos: fm.fotos.filter((_, j) => j !== i) }))}>
                     <X size={12} />
                   </button>
+                  <div className="flex justify-center gap-1 mt-1">
+                    <button className="btn-icon" style={{ padding: 3 }} disabled={i === 0} title="Mover para a esquerda"
+                      onClick={() => moverFoto(i, -1)}><ChevronLeft size={13} /></button>
+                    <button className="btn-icon" style={{ padding: 3 }} disabled={i === form.fotos.length - 1} title="Mover para a direita"
+                      onClick={() => moverFoto(i, 1)}><ChevronRight size={13} /></button>
+                  </div>
                 </div>
               ))}
-              <label className="btn-ghost" style={{ cursor: 'pointer' }}>
-                <ImageIcon size={14} /> {subindoFoto ? 'Enviando...' : 'Adicionar fotos'}
-                <input type="file" accept="image/*" multiple hidden onChange={anexarFotos} disabled={subindoFoto} />
-              </label>
+              {form.fotos.length < db.MAX_FOTOS_LOJA && (
+                <label className="btn-ghost" style={{ cursor: subindoFoto ? 'wait' : 'pointer', height: 92, width: 92, flexDirection: 'column', gap: 4, fontSize: 12, textAlign: 'center' }}>
+                  {subindoFoto ? <Upload size={16} /> : <Plus size={16} />}
+                  {subindoFoto ? 'Enviando...' : 'Adicionar'}
+                  <input type="file" accept="image/*" multiple hidden onChange={anexarFotos} disabled={subindoFoto} />
+                </label>
+              )}
             </div>
+            <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
+              A primeira foto (Capa) é a que aparece na lista da loja; as demais viram o carrossel na página do produto.
+              Use as setas para trocar a ordem.
+            </p>
           </Field>
           <Field label="" span={6}>
             <label className="flex items-center gap-2 text-sm" style={{ cursor: 'pointer' }}>

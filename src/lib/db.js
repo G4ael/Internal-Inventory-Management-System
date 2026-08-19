@@ -256,8 +256,12 @@ const lojaToDB = (p) => ({
   specs: p.specs || [], fotos: p.fotos || []
 });
 
+// Ordem fixa por categoria + nome: assim a lista não "pula" depois de salvar
+// (todos os produtos foram criados no mesmo instante, então ordenar por data
+// deixava a ordem imprevisível a cada consulta).
 export const listarLojaProdutos = async () => {
-  const { data, error } = await supabase.from('loja_produtos').select('*').order('criado_em', { ascending: false });
+  const { data, error } = await supabase.from('loja_produtos')
+    .select('*').order('categoria').order('nome');
   return { data: (data || []).map(lojaFromDB), error };
 };
 export const inserirLojaProduto = (p) => supabase.from('loja_produtos').insert(lojaToDB(p));
@@ -269,6 +273,8 @@ export const removerLojaProduto = async (p) => {
   if (paths.length) await supabase.storage.from('loja-fotos').remove(paths);
   return supabase.from('loja_produtos').delete().eq('id', p.id);
 };
+
+export const MAX_FOTOS_LOJA = 4;   // o carrossel do site mostra no máximo 4
 
 // Comprime a imagem no navegador (máx. 900px no maior lado, JPEG 85%)
 // para o site carregar rápido, e sobe pro bucket público `loja-fotos`.
