@@ -25,9 +25,12 @@ update storage.buckets set file_size_limit = 10485760,
 revoke update on public.perfis from anon, authenticated;
 grant  update (nome) on public.perfis to authenticated;
 
--- 4) Funções de gatilho não devem ser chamáveis pela API
-revoke execute on function public.tg_criar_perfil()            from anon, authenticated;
-revoke execute on function public.tg_bloquear_nao_autorizado() from anon, authenticated;
+-- 4) Funções de gatilho não devem ser chamáveis pela API.
+--    Atenção: toda função nasce com EXECUTE liberado para PUBLIC, então
+--    revogar só de anon/authenticated NÃO basta — tem que revogar de PUBLIC.
+--    Os gatilhos seguem funcionando: rodam pelo dono da tabela.
+revoke execute on function public.tg_criar_perfil()            from public, anon, authenticated;
+revoke execute on function public.tg_bloquear_nao_autorizado() from public, anon, authenticated;
 
 -- 5) search_path fixo (evita sequestro de função por schema malicioso)
 alter function public.tg_set_atualizado_em()        set search_path = public, pg_temp;
