@@ -40,8 +40,8 @@ const Configuracoes = () => {
   /* ------- Backup completo (inclui o catálogo da loja) ------- */
   const exportarBackup = async () => {
     setExportando(true);
-    const { data: loja } = await db.listarLojaProdutos();
-    const payload = { versao: 3, exportadoEm: new Date().toISOString(), dados: { ...data, lojaProdutos: loja } };
+    const [{ data: loja }, { data: instalacoes }] = await Promise.all([db.listarLojaProdutos(), db.listarInstalacoes()]);
+    const payload = { versao: 4, exportadoEm: new Date().toISOString(), dados: { ...data, lojaProdutos: loja, lojaInstalacoes: instalacoes } };
     downloadBlob(JSON.stringify(payload, null, 2), `backup-servigas-${hojeISO()}.json`);
     setExportando(false);
   };

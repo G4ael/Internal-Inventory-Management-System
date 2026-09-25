@@ -29,7 +29,8 @@ const PADROES = {
   orcamentos: () => ({ status: 'aberto', criado_em: agora() }),
   vendas: () => ({ numero: ++seqVenda, status: 'finalizada', criado_em: agora(), desconto: 0 }),
   movimentacoes: () => ({ criado_em: agora() }),
-  loja_produtos: () => ({ ativo: true, destaque: false, specs: [], fotos: [] })
+  loja_produtos: () => ({ ativo: true, destaque: false, na_escolha: false, promo_principal: false, specs: [], fotos: [] }),
+  loja_instalacoes: () => ({ ativo: true, legenda: '', ordem: 0, criado_em: agora() })
 };
 
 // Gatilhos (o que o banco real faz sozinho)
