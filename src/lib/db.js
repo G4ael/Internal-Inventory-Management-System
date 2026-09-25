@@ -22,7 +22,7 @@ const produtoFromDB = (r) => ({ id: r.id, nome: r.nome, sku: r.sku, qtd: r.quant
 const produtoToDB = (p) => ({ nome: p.nome, sku: p.sku || null, quantidade: p.qtd, estoque_minimo: p.minimo, preco: p.preco });
 
 // Clientes
-const clienteFromDB = (r) => ({ id: r.id, nome: r.nome, telefone: r.telefone, endereco: r.endereco, documento: r.documento, obs: r.observacoes });
+const clienteFromDB = (r) => ({ id: r.id, nome: r.nome, telefone: r.telefone, endereco: r.endereco, documento: r.documento, obs: r.observacoes, criadoEm: r.criado_em });
 const clienteToDB = (c) => ({ nome: c.nome, telefone: c.telefone || null, endereco: c.endereco || null, documento: c.documento || null, observacoes: c.obs || null });
 
 // Tabela de preços
@@ -159,6 +159,9 @@ export const atualizarOS = async (os) => {
   return { ok: true };
 };
 
+// Muda só o status (não mexe nos itens, então o estoque não é tocado)
+export const atualizarStatusOS = (id, status) => supabase.from('ordens_servico').update({ status }).eq('id', id);
+
 export const removerOS = (id) => supabase.from('ordens_servico').delete().eq('id', id);
 
 /* ───────────────────────── ORÇAMENTOS ───────────────────────── */
@@ -263,6 +266,11 @@ export const listarLojaProdutos = async () => {
   const { data, error } = await supabase.from('loja_produtos')
     .select('*').order('categoria').order('nome');
   return { data: (data || []).map(lojaFromDB), error };
+};
+// Quantos produtos estão no ar no site (mostrado no menu lateral)
+export const contarLojaAtivos = async () => {
+  const { count, error } = await supabase.from('loja_produtos').select('id', { count: 'exact', head: true }).eq('ativo', true);
+  return error ? null : count;
 };
 export const inserirLojaProduto = (p) => supabase.from('loja_produtos').insert(lojaToDB(p));
 export const atualizarLojaProduto = (id, p) => supabase.from('loja_produtos').update(lojaToDB(p)).eq('id', id);
