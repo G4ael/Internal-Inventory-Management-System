@@ -94,5 +94,5 @@ export const criarDadosDemo = () => {
     emitente_razao: 'Servigás Aquecedores (demonstração)', emitente_cnpj: '00.000.000/0001-00', emitente_inscricao: '000000'
   }];
 
-  return { clientes, produtos, tabela_precos, ordens_servico, os_itens, orcamentos, vendas, vendas_itens, notas_fiscais, movimentacoes, loja_produtos, configuracoes };
+  return { clientes, produtos, tabela_precos, ordens_servico, os_itens, orcamentos, vendas, vendas_itens, notas_fiscais, movimentacoes, loja_produtos, loja_instalacoes: [], configuracoes };
 };

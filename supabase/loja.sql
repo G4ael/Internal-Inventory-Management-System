@@ -94,3 +94,32 @@ begin
     ('Kit de exaustão sob medida (projeto)', 'Servigás', 'dutos', '', null, null, false, 'Instalações especiais (prumadas longas, shafts, coletivos): nossa equipe dimensiona e monta o kit ideal.', '["Projeto personalizado","Visita técnica","Materiais certificados"]'::jsonb);
   end if;
 end $$;
+
+-- ============================================================================
+-- 6) Seleções do site (adicionado em 25/09/2026) — pode rodar de novo.
+--    na_escolha      → aquecedor aparece no "Qual serve na sua casa?"
+--    promo_principal → produto grande do "Baixou o preço" (um por vez)
+-- ============================================================================
+alter table loja_produtos add column if not exists na_escolha boolean not null default false;
+alter table loja_produtos add column if not exists promo_principal boolean not null default false;
+
+-- 7) Fotos de aquecedores instalados (carrossel do bloco "Quem vende é quem
+--    instala"). As imagens ficam no mesmo bucket, na pasta instalacoes/.
+create table if not exists loja_instalacoes (
+  id        uuid primary key default gen_random_uuid(),
+  foto      text not null,                 -- URL pública da imagem
+  legenda   text not null default '',      -- ex.: "Rinnai 21 L — casa no Glória"
+  ordem     integer not null default 0,    -- menor aparece primeiro
+  ativo     boolean not null default true, -- false = some do site sem apagar
+  criado_em timestamptz not null default now()
+);
+
+alter table loja_instalacoes enable row level security;
+
+drop policy if exists "instalacoes: leitura publica de ativas" on loja_instalacoes;
+create policy "instalacoes: leitura publica de ativas" on loja_instalacoes
+  for select using (ativo = true);
+
+drop policy if exists "instalacoes: equipe logada gerencia" on loja_instalacoes;
+create policy "instalacoes: equipe logada gerencia" on loja_instalacoes
+  for all to authenticated using (true) with check (true);

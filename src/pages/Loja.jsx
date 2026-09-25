@@ -3,14 +3,14 @@
 // O que você salva aqui aparece na hora em servigas-loja.vercel.app.
 // ============================================================================
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Eye, EyeOff, ExternalLink, Image as ImageIcon, X, ChevronLeft, ChevronRight, Upload, Store, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, EyeOff, ExternalLink, Image as ImageIcon, X, ChevronLeft, ChevronRight, Upload, Store, AlertCircle, Camera, Tag, Droplet } from 'lucide-react';
 import * as db from '../lib/db';
 import { useToast } from '../contexto';
 import { fmtBRL, contem } from '../lib/format';
 import { CATS_LOJA, URL_LOJA } from '../lib/dominio';
-import { PageHeader, BuscaPagina, Chips, Selo, Modal, Field, Vazio, Esqueleto } from '../components/ui';
+import { PageHeader, BuscaPagina, Chips, Selo, Modal, Field, Vazio, Esqueleto, Segmentado } from '../components/ui';
 
-const FORM_LOJA_VAZIO = { nome: '', marca: '', categoria: 'aquecedores', sub: '', preco: '', precoAntigo: '', destaque: false, ativo: true, descricao: '', specsTexto: '', fotos: [] };
+const FORM_LOJA_VAZIO = { nome: '', marca: '', categoria: 'aquecedores', sub: '', preco: '', precoAntigo: '', destaque: false, ativo: true, descricao: '', specsTexto: '', fotos: [], naEscolha: false, promoPrincipal: false };
 
 const Loja = ({ search, setSearch }) => {
   const toast = useToast();
@@ -20,6 +20,7 @@ const Loja = ({ search, setSearch }) => {
   const [form, setForm] = useState(FORM_LOJA_VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [subindoFoto, setSubindoFoto] = useState(false);
+  const [aba, setAba] = useState('produtos');
   const { lista, carregando, erro } = estado;
 
   const carregar = useCallback(() => db.listarLojaProdutos().then(({ data, error }) => {
@@ -37,7 +38,16 @@ const Loja = ({ search, setSearch }) => {
   const salvar = async () => {
     if (!form.nome.trim()) { toast('Dê um nome ao produto.', 'error'); return; }
     setSalvando(true);
-    const payload = { ...form, specs: form.specsTexto.split('\n').map(s => s.trim()).filter(Boolean) };
+    const temPromo = form.precoAntigo !== '' && form.precoAntigo != null;
+    const payload = {
+      ...form, specs: form.specsTexto.split('\n').map(s => s.trim()).filter(Boolean),
+      naEscolha: form.categoria === 'aquecedores' && form.naEscolha,
+      promoPrincipal: temPromo && form.promoPrincipal
+    };
+    if (payload.promoPrincipal) {
+      const { error: e } = await db.limparPromoPrincipal();
+      if (e) { setSalvando(false); toast('Erro ao salvar: ' + e.message, 'error'); return; }
+    }
     const { error } = modal === 'edit'
       ? await db.atualizarLojaProduto(form.id, payload)
       : await db.inserirLojaProduto(payload);
@@ -91,29 +101,41 @@ const Loja = ({ search, setSearch }) => {
 
   const catAtual = CATS_LOJA.find(c => c.id === form.categoria);
   const porBusca = lista.filter(p => contem(`${p.nome} ${p.marca}`, search));
-  const filtrados = porBusca.filter(p => categoria === 'todas' || (categoria === 'ocultos' ? !p.ativo : p.categoria === categoria));
+  const filtrados = porBusca.filter(p => categoria === 'todas'
+    || (categoria === 'ocultos' ? !p.ativo : categoria === 'escolha' ? p.naEscolha : p.categoria === categoria));
+  const temPromoForm = form.precoAntigo !== '' && form.precoAntigo != null;
   const semFoto = lista.filter(p => p.fotos.length === 0).length;
 
   return (
     <>
       <PageHeader titulo="Loja virtual" sub={`${lista.length} produtos · ${lista.filter(p => p.ativo).length} no ar — o que você salva aqui aparece na hora no site`}>
         <a className="btn btn-contorno" href={URL_LOJA} target="_blank" rel="noreferrer"><ExternalLink /> Ver o site</a>
-        <button className="btn btn-preto" onClick={() => abrir(null)}><Plus /> Novo produto</button>
+        {aba === 'produtos' && <button className="btn btn-preto" onClick={() => abrir(null)}><Plus /> Novo produto</button>}
       </PageHeader>
 
-      {erro && (
+      <div className="barra">
+        <Segmentado rotulo="Parte da loja" valor={aba} onChange={setAba} opcoes={[
+          { id: 'produtos', label: 'Produtos', icone: Store },
+          { id: 'instalacoes', label: 'Fotos de instalações', icone: Camera }
+        ]} />
+      </div>
+
+      {aba === 'instalacoes' && <Instalacoes />}
+
+      {aba === 'produtos' && erro && (
         <div className="aviso-faixa erro"><AlertCircle />
           <span><b>Não consegui acessar o catálogo.</b> ({erro})<br />Se a tabela ainda não existe, rode o script <span className="mono">supabase/loja.sql</span> no SQL Editor do painel do Supabase e recarregue esta página.</span>
         </div>
       )}
 
-      {!erro && (
+      {aba === 'produtos' && !erro && (
         <>
           <div className="barra">
             <BuscaPagina value={search} onChange={setSearch} placeholder="Buscar produto ou marca" />
             <Chips rotulo="Categoria" valor={categoria} onChange={setCategoria} opcoes={[
               { id: 'todas', label: 'Todas', qtd: porBusca.length },
               ...CATS_LOJA.map(c => ({ id: c.id, label: c.nome, qtd: porBusca.filter(p => p.categoria === c.id).length })).filter(c => c.qtd > 0),
+              ...(porBusca.some(p => p.naEscolha) ? [{ id: 'escolha', label: 'No “Qual serve”', qtd: porBusca.filter(p => p.naEscolha).length }] : []),
               ...(porBusca.some(p => !p.ativo) ? [{ id: 'ocultos', label: 'Ocultos', qtd: porBusca.filter(p => !p.ativo).length }] : [])
             ]} />
           </div>
@@ -147,6 +169,8 @@ const Loja = ({ search, setSearch }) => {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
                               <span className="t3" style={{ fontSize: 12.5 }}>{p.marca}</span>
                               {p.destaque && <Selo tom="laranja">Destaque</Selo>}
+                              {p.naEscolha && <Selo tom="info" icone={Droplet} title="Aparece no “Qual serve na sua casa?”">Qual serve</Selo>}
+                              {p.promoPrincipal && <Selo tom="contorno" icone={Tag} title="Produto grande do “Baixou o preço”">Principal da promoção</Selo>}
                               {p.fotos.length === 0 && <Selo tom="aviso">sem foto</Selo>}
                             </div>
                           </div>
@@ -244,6 +268,18 @@ const Loja = ({ search, setSearch }) => {
               )}
             </div>
           </Field>
+          {form.categoria === 'aquecedores' && (
+            <Field span={12} dica="No site, o bloco mostra até 3 aquecedores marcados por faixa de chuveiros (1, 2 ou 3+), do menor preço para o maior. Enquanto nenhum estiver marcado, o site escolhe sozinho pela vazão.">
+              <label className="marcar"><input type="checkbox" checked={form.naEscolha} onChange={e => setForm({ ...form, naEscolha: e.target.checked })} /> Aparece no “Qual serve na sua casa?”</label>
+            </Field>
+          )}
+          <Field span={12} dica={temPromoForm
+            ? 'Vira o produto grande do bloco “Baixou o preço”. Só um produto pode ser o principal: marcar este desmarca o anterior.'
+            : 'Preencha o “Preço antigo” para este produto entrar no “Baixou o preço”.'}>
+            <label className="marcar" style={temPromoForm ? undefined : { opacity: .5, cursor: 'not-allowed' }}>
+              <input type="checkbox" disabled={!temPromoForm} checked={temPromoForm && form.promoPrincipal} onChange={e => setForm({ ...form, promoPrincipal: e.target.checked })} /> Principal do “Baixou o preço”
+            </label>
+          </Field>
           <Field span={6}>
             <label className="marcar"><input type="checkbox" checked={form.destaque} onChange={e => setForm({ ...form, destaque: e.target.checked })} /> Selo “Destaque” (aparece primeiro no site)</label>
           </Field>
@@ -253,6 +289,127 @@ const Loja = ({ search, setSearch }) => {
         </div>
       </Modal>
     </>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fotos de instalações: carrossel do bloco "Quem vende é quem instala" no site
+// ─────────────────────────────────────────────────────────────────────────────
+const Instalacoes = () => {
+  const toast = useToast();
+  const [estado, setEstado] = useState({ lista: [], carregando: true, erro: null });
+  const [subindo, setSubindo] = useState(false);
+  const [legendas, setLegendas] = useState({});
+  const { lista, carregando, erro } = estado;
+
+  const carregar = useCallback(() => db.listarInstalacoes().then(({ data, error }) => {
+    setEstado(error ? { lista: [], carregando: false, erro: error.message } : { lista: data, carregando: false, erro: null });
+    if (!error) setLegendas(Object.fromEntries(data.map(i => [i.id, i.legenda])));
+  }), []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const anexar = async (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (!files.length) return;
+    setSubindo(true);
+    let ordem = lista.reduce((m, i) => Math.max(m, i.ordem), 0);
+    for (const f of files) {
+      const { url, error } = await db.uploadFotoInstalacao(f);
+      if (error) { toast('Foto não subiu: ' + error.message, 'error'); continue; }
+      const { error: e2 } = await db.inserirInstalacao({ foto: url, ordem: ++ordem });
+      if (e2) toast('Erro ao salvar a foto: ' + e2.message, 'error');
+    }
+    setSubindo(false);
+    toast('Fotos adicionadas! Já aparecem no site.', 'success');
+    carregar();
+  };
+
+  const salvarLegenda = async (i) => {
+    const nova = (legendas[i.id] ?? '').trim();
+    if (nova === i.legenda) return;
+    const { error } = await db.atualizarInstalacao(i.id, { legenda: nova });
+    if (error) toast('Erro: ' + error.message, 'error'); else { toast('Legenda salva.', 'success'); carregar(); }
+  };
+
+  // Troca a posição com a vizinha (a primeira aparece primeiro no site)
+  const mover = async (idx, d) => {
+    const a = lista[idx], b = lista[idx + d];
+    if (!a || !b) return;
+    const ordemA = a.ordem === b.ordem ? idx : a.ordem, ordemB = a.ordem === b.ordem ? idx + d : b.ordem;
+    await Promise.all([db.atualizarInstalacao(a.id, { ordem: ordemB }), db.atualizarInstalacao(b.id, { ordem: ordemA })]);
+    carregar();
+  };
+
+  const alternar = async (i) => {
+    const { error } = await db.atualizarInstalacao(i.id, { ativo: !i.ativo });
+    if (error) toast('Erro: ' + error.message, 'error');
+    else toast(i.ativo ? 'Foto ocultada do site.' : 'Foto de volta ao site!', 'success');
+    carregar();
+  };
+
+  const remover = async (i) => {
+    if (!confirm('Remover esta foto de instalação? Ela também é apagada do armazenamento.')) return;
+    const { error } = await db.removerInstalacao(i);
+    if (error) toast('Erro ao remover: ' + error.message, 'error'); else toast('Foto removida.', 'success');
+    carregar();
+  };
+
+  if (erro) return (
+    <div className="aviso-faixa erro"><AlertCircle />
+      <span><b>Não consegui acessar as fotos de instalações.</b> ({erro})<br />Rode de novo o script <span className="mono">supabase/loja.sql</span> no SQL Editor do Supabase e recarregue a página.</span>
+    </div>
+  );
+
+  const botaoAdicionar = (
+    <label className="btn btn-preto" style={{ cursor: subindo ? 'wait' : 'pointer' }}>
+      {subindo ? <Upload /> : <Plus />}{subindo ? 'Enviando…' : 'Adicionar fotos'}
+      <input type="file" accept="image/*" multiple hidden onChange={anexar} disabled={subindo} />
+    </label>
+  );
+
+  return (
+    <div className="cartao" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+        <p className="t2" style={{ margin: 0, maxWidth: '60ch', fontSize: 14 }}>
+          Fotos de aquecedores que a equipe instalou. Aparecem no site em carrossel, no bloco “Quem vende é quem instala”, na ordem abaixo. Fotos na horizontal ficam melhores.
+        </p>
+        {lista.length > 0 && botaoAdicionar}
+      </div>
+      {carregando ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+          {[0, 1, 2].map(i => <Esqueleto key={i} h={200} r={16} />)}
+        </div>
+      ) : lista.length === 0 ? (
+        <Vazio icone={Camera} titulo="Nenhuma foto de instalação ainda" texto="Enquanto não houver fotos, o site mostra só o título no bloco.">{botaoAdicionar}</Vazio>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+          {lista.map((i, idx) => (
+            <div key={i.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: i.ativo ? 1 : .55 }}>
+              <div style={{ position: 'relative' }}>
+                <img src={i.foto} alt={i.legenda || `Instalação ${idx + 1}`} style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', borderRadius: 14, display: 'block', background: 'var(--tile)' }} />
+                <span className="selo selo-neutro" style={{ position: 'absolute', top: 8, left: 8 }}>{idx + 1}º</span>
+                {!i.ativo && <span className="selo selo-aviso" style={{ position: 'absolute', top: 8, right: 8 }}>Oculta</span>}
+              </div>
+              <input className="campo" value={legendas[i.id] ?? ''} placeholder="Legenda (opcional): ex. Rinnai 21 L no Glória"
+                aria-label={`Legenda da foto ${idx + 1}`}
+                onChange={e => setLegendas(l => ({ ...l, [i.id]: e.target.value }))}
+                onBlur={() => salvarLegenda(i)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+              <div style={{ display: 'flex', gap: 4, justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  <button className="btn-icone" disabled={idx === 0} aria-label="Mover para antes" title="Mover para antes" onClick={() => mover(idx, -1)}><ChevronLeft /></button>
+                  <button className="btn-icone" disabled={idx === lista.length - 1} aria-label="Mover para depois" title="Mover para depois" onClick={() => mover(idx, 1)}><ChevronRight /></button>
+                </div>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  <button className="btn-icone" onClick={() => alternar(i)} title={i.ativo ? 'Ocultar do site' : 'Mostrar no site'} aria-label={i.ativo ? 'Ocultar do site' : 'Mostrar no site'}>{i.ativo ? <EyeOff /> : <Eye />}</button>
+                  <button className="btn-icone perigo" onClick={() => remover(i)} title="Remover" aria-label={`Remover foto ${idx + 1}`}><Trash2 /></button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 

@@ -249,14 +249,16 @@ const lojaFromDB = (r) => ({
   preco: r.preco == null ? null : Number(r.preco),
   precoAntigo: r.preco_antigo == null ? null : Number(r.preco_antigo),
   destaque: r.destaque, ativo: r.ativo, descricao: r.descricao,
-  specs: r.specs || [], fotos: r.fotos || []
+  specs: r.specs || [], fotos: r.fotos || [],
+  naEscolha: !!r.na_escolha, promoPrincipal: !!r.promo_principal
 });
 const lojaToDB = (p) => ({
   nome: p.nome, marca: p.marca || '', categoria: p.categoria, sub: p.sub || '',
   preco: p.preco === '' || p.preco == null ? null : Number(p.preco),
   preco_antigo: p.precoAntigo === '' || p.precoAntigo == null ? null : Number(p.precoAntigo),
   destaque: !!p.destaque, ativo: p.ativo !== false, descricao: p.descricao || '',
-  specs: p.specs || [], fotos: p.fotos || []
+  specs: p.specs || [], fotos: p.fotos || [],
+  na_escolha: !!p.naEscolha, promo_principal: !!p.promoPrincipal
 });
 
 // Ordem fixa por categoria + nome: assim a lista não "pula" depois de salvar
@@ -272,6 +274,10 @@ export const contarLojaAtivos = async () => {
   const { count, error } = await supabase.from('loja_produtos').select('id', { count: 'exact', head: true }).eq('ativo', true);
   return error ? null : count;
 };
+// Só um produto pode ser o principal do "Baixou o preço": antes de marcar
+// um, desmarca os outros.
+export const limparPromoPrincipal = () =>
+  supabase.from('loja_produtos').update({ promo_principal: false }).eq('promo_principal', true);
 export const inserirLojaProduto = (p) => supabase.from('loja_produtos').insert(lojaToDB(p));
 export const atualizarLojaProduto = (id, p) => supabase.from('loja_produtos').update(lojaToDB(p)).eq('id', id);
 
@@ -303,6 +309,32 @@ const comprimirImagem = (file, maxLado = 900) => new Promise((resolve) => {
 export const uploadFotoLoja = async (file) => {
   const blob = await comprimirImagem(file);
   const path = `produtos/${uid()}.jpg`;
+  const { error } = await supabase.storage.from('loja-fotos').upload(path, blob, { contentType: 'image/jpeg' });
+  if (error) return { error };
+  const { data } = supabase.storage.from('loja-fotos').getPublicUrl(path);
+  return { url: data.publicUrl };
+};
+
+/* ─────────── Fotos de instalações (carrossel do site) ─────────── */
+// Tabela `loja_instalacoes`: o site mostra as ativas, em ordem, no bloco
+// "Quem vende é quem instala". As imagens ficam em loja-fotos/instalacoes/.
+const instFromDB = (r) => ({ id: r.id, foto: r.foto, legenda: r.legenda || '', ordem: r.ordem ?? 0, ativo: r.ativo !== false });
+export const listarInstalacoes = async () => {
+  const { data, error } = await supabase.from('loja_instalacoes').select('*').order('ordem').order('criado_em');
+  return { data: (data || []).map(instFromDB), error };
+};
+export const inserirInstalacao = (i) => supabase.from('loja_instalacoes')
+  .insert({ foto: i.foto, legenda: i.legenda || '', ordem: i.ordem ?? 0, ativo: i.ativo !== false });
+export const atualizarInstalacao = (id, campos) => supabase.from('loja_instalacoes').update(campos).eq('id', id);
+export const removerInstalacao = async (i) => {
+  const path = (i.foto || '').split('/loja-fotos/')[1];
+  if (path) await supabase.storage.from('loja-fotos').remove([path]);
+  return supabase.from('loja_instalacoes').delete().eq('id', i.id);
+};
+// Foto de instalação é maior que a de produto (ocupa o carrossel inteiro)
+export const uploadFotoInstalacao = async (file) => {
+  const blob = await comprimirImagem(file, 1400);
+  const path = `instalacoes/${uid()}.jpg`;
   const { error } = await supabase.storage.from('loja-fotos').upload(path, blob, { contentType: 'image/jpeg' });
   if (error) return { error };
   const { data } = supabase.storage.from('loja-fotos').getPublicUrl(path);
