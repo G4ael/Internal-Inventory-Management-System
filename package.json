@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:demo": "vite build --config vite.demo.config.js && node scripts/demo-arquivo-unico.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
